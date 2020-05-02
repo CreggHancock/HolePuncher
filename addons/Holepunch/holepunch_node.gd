@@ -24,7 +24,6 @@ var recieved_peer_confirm = false
 var recieved_peer_go = false
 
 var is_host = false
-var starting_game = false
 
 var own_port
 var peer = {}
@@ -116,6 +115,7 @@ func _handle_go_message(peer_name):
 	recieved_peer_go = true
 	emit_signal("hole_punched", int(own_port), int(host_port), host_address)
 	peer_udp.close()
+	p_timer.stop()
 	set_process(false)
 
 
@@ -129,7 +129,6 @@ func _cascade_peer(add, peer_port):
 
 
 func _ping_peer():
-	if starting_game: return
 	
 	if not recieved_peer_confirm and greets_sent < response_window:
 		for p in peer.keys():
@@ -141,7 +140,6 @@ func _ping_peer():
 			if greets_sent == response_window:
 				print("Receiving no confirm. Starting port cascade")
 				#if the other player hasn't responded we should try more ports
-
 
 	if not recieved_peer_confirm and greets_sent == response_window:
 		for p in peer.keys():
