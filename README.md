@@ -22,10 +22,10 @@ The HolePunch plugin can be used in combination with the Server to manage port-f
 
 #### Methods
 
-| Return type | Name                           |
-| ----------- | ------------------------------ |
-| void        | start_traversal( string key )  |
-| void        | finalize_peers( string key)    |
+| Return type | Name                                                                  |
+| ----------- | ----------------------------------------------------------------------|
+| void        | start_traversal( string key, bool is_player_host, string player_name) |
+| void        | finalize_peers( string key)                                           |
 
 #### Signals
 
@@ -44,17 +44,15 @@ Emitted when all peers have completed their holepunch and are ready to connect t
 
 -`string rendevouz_address` The ip address that is being used for the intermediate or holepunch server.
 
--`string host_address` The ip address of the confirmed host (will default to null if the client is the host or before the host information is obtained).
+-`string host_address` The ip address of the confirmed host (will default to "" if the client is the host or before the host information is obtained).
 
--`string host_port` The port of the confirmed host (will default to null if the client is the host or before the host information is obtained).
+-`string host_port` The port of the confirmed host (will default to 0 if the client is the host or before the host information is obtained).
 
 -`int rendevouz_port` The port that is being used for the intermediate or holepunch server.
 
 -`int max_player_count` The maximum amount of players the holepunch server sessions will account for before automatically connecting peers.
 
 -`bool is_host` If the client running this game is the client hosting the game server or not.
-
--`bool starting_game` If the client running this game is the client hosting the game server or not.
 
 
 #### Method Descriptions
