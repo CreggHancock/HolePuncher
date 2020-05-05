@@ -125,6 +125,8 @@ class Session:
 			self.server.transport.write(message, (addressed_client.ip, addressed_client.port))
 
 		print("Peer info has been sent. Terminating Session")
+		for client in self.registered_clients:
+			self.server.client_checkout(client.name)
 		self.server.remove_session(self.id)
 
 
