@@ -98,14 +98,12 @@ class ServerProtocol(DatagramProtocol):
 
 class Session:
 
-	id = -1
-	client_max = "2"
-	registered_clients = []
-
 	def __init__(self, session_id, max_clients, server):
 		self.id = session_id
 		self.client_max = max_clients
 		self.server = server
+		self.registered_clients = []
+
 
 	def client_registered(self, client):
 		if client in self.registered_clients: return
@@ -131,7 +129,6 @@ class Session:
 
 
 class Client:
-	received_peer_info = False
 
 	def confirmation_received(self):
 		self.received_peer_info = True
@@ -141,6 +138,7 @@ class Client:
 		self.session_id = c_session
 		self.ip = c_ip
 		self.port = c_port
+		self.received_peer_info = False
 
 if __name__ == '__main__':
 	if len(sys.argv) < 2:
