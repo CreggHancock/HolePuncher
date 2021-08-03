@@ -234,6 +234,6 @@ func _exit_tree():
 
 func _ready():
 	p_timer = Timer.new()
-	get_node("/root/").add_child(p_timer)
+	get_node("/root/").call_deferred("add_child", p_timer)
 	p_timer.connect("timeout", self, "_ping_peer")
 	p_timer.wait_time = 0.1
