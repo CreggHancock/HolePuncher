@@ -1,0 +1,12 @@
+[gd_scene format=2]
+
+[node name="Lobby" type="Node2D"]
+
+[node name="CurrentLobby" type="Label" parent="."]
+margin_right = 1024.0
+margin_bottom = 14.0
+text = "ROOM CODE: "
+align = 1
+__meta__ = {
+"_edit_use_anchors_": false
+}
