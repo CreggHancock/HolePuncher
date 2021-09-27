@@ -61,6 +61,8 @@ Emitted when all peers have completed their holepunch and are ready to connect t
 
 -`void finalize_peers(string key)` Call this method on the HolePunch node when you want to stop waiting for peers to begin the HolePunch process early before the server has reached the *max_player_count* value.
 
+-`void checkout()` Call this method on the HolePunch node when you want to cancel the HolePunch process after you've already started it.
+
 
 # Server
  A UDP hole punching server in python + Godot Client
