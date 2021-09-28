@@ -4,6 +4,10 @@ extends Node
 #Once your network manager received the signal they can host or join a game on the host port
 signal hole_punched(my_port, hosts_port, hosts_address)
 
+#This signal is emitted when the server has acknowledged your client registration, but before the
+#address and port of the other client have arrived.
+signal session_registered
+
 var server_udp = PacketPeerUDP.new()
 var peer_udp = PacketPeerUDP.new()
 
@@ -75,6 +79,7 @@ func _process(delta):
 		if packet_string.begins_with(SERVER_OK):
 			var m = packet_string.split(":")
 			own_port = int( m[1] )
+			emit_signal('session_registered')
 			if is_host:
 				if !found_server:
 					_send_client_to_server()
@@ -228,6 +233,7 @@ func start_traversal(id, is_player_host, player_name):
 		_send_client_to_server()
 
 
+#Register a client with the server
 func _send_client_to_server():
 	yield(get_tree().create_timer(2.0), "timeout")
 	var buffer = PoolByteArray()
