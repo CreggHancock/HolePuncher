@@ -40,6 +40,7 @@ var gos_sent = 0
 const REGISTER_SESSION = "rs:"
 const REGISTER_CLIENT = "rc:"
 const EXCHANGE_PEERS = "ep:"
+const CHECKOUT_CLIENT = "cc:"
 const PEER_GREET = "greet"
 const PEER_CONFIRM = "confirm"
 const PEER_GO = "go"
@@ -182,6 +183,14 @@ func start_peer_contact():
 func finalize_peers(id):
 	var buffer = PoolByteArray()
 	buffer.append_array((EXCHANGE_PEERS+str(id)).to_utf8())
+	server_udp.set_dest_address(rendevouz_address, rendevouz_port)
+	server_udp.put_packet(buffer)
+
+
+# remove a client from the server
+func checkout():
+	var buffer = PoolByteArray()
+	buffer.append_array((CHECKOUT_CLIENT+client_name).to_utf8())
 	server_udp.set_dest_address(rendevouz_address, rendevouz_port)
 	server_udp.put_packet(buffer)
 
