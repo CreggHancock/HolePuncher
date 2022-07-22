@@ -1,6 +1,6 @@
 ## HolePunch Plugin
 
-The HolePunch plugin can be used in combination with the Server to manage port-forwarding in your game through a method known as hole punching. To get started with the plugin start by importing the addons folder in the example project into your Godot game folder and enabling the plugin. Afterwards you can add the HolePunch node to the scene where you utilize matchmaking to begin setting up hole punching for your game.
+The HolePunch plugin can be used in combination with the Server to manage port-forwarding in your game through a method known as hole punching. To get started with the plugin start by importing the addons folder into your Godot game folder and enabling the plugin. Afterwards you can add the HolePunch node to the scene where you utilize matchmaking to begin setting up hole punching for your game.
 
 ### Documentation
 
@@ -72,16 +72,6 @@ The python server is based on https://github.com/stylesuxx/udp-hole-punching/
 Server requires Python 3 and Twisted: https://twistedmatrix.com/trac/
 
 `Usage: ./server.py PORT`
-
-
-#### Getting started
-
-A very basic implementation of the plugin can be found under 'example project'. If you follow the instructions below, you can set up this project, and see how to use the plugin.
-
-First make sure you have a server running the server code. You can host this yourself, or find a paid linux hosting service like Linode to do it for you.
-Now set the Rendevouz Address property of HolePuncher in Menu.tscn to the IP of your server, and set the Rendevouz Port to the port you opened the server on.
-Finally you should be able to host a game on a machine under one router, and connect from another.
-Hopefully this should be a jumping off point for your networking project.
 
 
 
