@@ -1,7 +1,23 @@
 extends Node
 #Todo:
-#Errors should probably send signals to game, so users can try again
-#Organize code an stuff
+# [ ] Errors should probably send signals to game, so users can try again
+# [x] >2 players is broken, only 1 peer gets registered, and it's port is concatenated with the next player, should be simple fix
+
+# General structure overview:
+
+# HOST:
+# Game calls start_traversal, initializing variables, and starting session.
+# _process receives ok, then registers client
+# _process later receives peer info, when peer max reached, or when ended early through finalize_peers
+# start_peer_contact is called, server connection is closed
+# _ping_peer loop is started
+# no messages are sent?
+
+# PEER:
+# Game calls start_traversal(), initializing variables, and registering client.
+# _process later receives peer info, when peer max reached, or when ended early through finalize_peers
+# start_peer_contact is called
+# _ping_peer loop is started
 
 #Signal is emitted when holepunch is complete. Connect this signal to your network manager
 #Once your network manager received the signal they can host or join a game on the host port
@@ -37,7 +53,7 @@ var peer = {}
 var host_address = ""
 var host_port = 0
 var client_name
-var p_timer #Ping timer, for communicating with peers
+var p_timer #ping timer, for communicating with peers
 var session_id
 
 var ports_tried = 0
@@ -60,20 +76,24 @@ const MAX_PLAYER_COUNT = 2
 func _process(delta):
 	#handle peer messages
 	if peer_udp.get_available_packet_count() > 0:
+		print("peer message!")
 		var array_bytes = peer_udp.get_packet()
 		var packet_string = array_bytes.get_string_from_ascii()
 		if not recieved_peer_greet:
 			if packet_string.begins_with(PEER_GREET):
+				print("peer greet!")
 				var m = packet_string.split(":")
 				_handle_greet_message(m[1], int(m[2]), int(m[3]))
 
 		if not recieved_peer_confirm:
 			if packet_string.begins_with(PEER_CONFIRM):
+				print("peer confirm!")
 				var m = packet_string.split(":")
 				_handle_confirm_message(m[2], m[1], m[4], m[3]) #weird that this is out of order?
 
 		elif not recieved_peer_go:
 			if packet_string.begins_with(PEER_GO):
+				print("peer go!")
 				var m = packet_string.split(":")
 				_handle_go_message(m[1])
 
@@ -87,16 +107,18 @@ func _process(delta):
 			emit_signal('session_registered')
 			if is_host:
 				if !found_server:
-					_send_client_to_server()
+					_send_client_to_server() #register host to session (other peers are done in start_traversal)
 			found_server=true
 
 		if not recieved_peer_info:
 			if packet_string.begins_with(SERVER_INFO):
 				server_udp.close()
 				packet_string = packet_string.right(6)
-				if packet_string.length() > 2: #add first peer
-					var m = packet_string.split(":")
-					peer[m[0]] = {"port":m[2], "address":m[1]}
+				if packet_string.length() > 2: #if not, then player ended lobby without peers? handle this case
+					var clientdata = packet_string.split(",") #messages is formatted client:ip:port,client2:ip:port
+					for c in clientdata:
+						var m = c.split(":")
+						peer[m[0]] = {"port":m[2], "address":m[1]}
 					recieved_peer_info = true
 					start_peer_contact()
 
@@ -109,7 +131,7 @@ func _handle_greet_message(peer_name, peer_port, my_port):
 	recieved_peer_greet = true #investigate, why is there one check when there can be multiple clients?
 
 #handle confirm; what is confirm?
-func _handle_confirm_message(peer_name, peer_port, my_port, is_host): #is_host is for the peer, not you
+func _handle_confirm_message(peer_name, peer_port, my_port, is_host): #is_host is the name is the same as another variable, CHANGE
 	if peer[peer_name].port != peer_port:
 		peer[peer_name].port = peer_port
 
@@ -182,7 +204,8 @@ func _ping_peer():
 
 #initiate _ping_peer loop, disconnect from server
 func start_peer_contact():	
-	server_udp.put_packet("goodbye".to_utf8())
+	print(peer)
+	server_udp.put_packet("goodbye".to_utf8()) #this might not always get called because the server_udp is already closed before this. seems to be true from testing.
 	server_udp.close()
 	if peer_udp.is_listening():
 		peer_udp.close()
@@ -198,14 +221,14 @@ func finalize_peers(id):
 	server_udp.set_dest_address(rendevouz_address, rendevouz_port)
 	server_udp.put_packet(buffer)
 
-# remove a client from the server
+#remove a client from the server
 func checkout():
 	var buffer = PoolByteArray()
 	buffer.append_array((CHECKOUT_CLIENT+client_name).to_utf8())
 	server_udp.set_dest_address(rendevouz_address, rendevouz_port)
 	server_udp.put_packet(buffer)
 
-#Call this function when you want to start the holepunch process
+#call this function when you want to start the holepunch process
 func start_traversal(id, is_player_host, player_name):
 	if server_udp.is_listening():
 		server_udp.close()
@@ -231,13 +254,14 @@ func start_traversal(id, is_player_host, player_name):
 	if (is_host):
 		var buffer = PoolByteArray()
 		buffer.append_array((REGISTER_SESSION+session_id+":"+str(MAX_PLAYER_COUNT)).to_utf8())
-		server_udp.close()
+		server_udp.close() #redundant?
 		server_udp.set_dest_address(rendevouz_address, rendevouz_port)
 		server_udp.put_packet(buffer)
+		#host gets added to session after an ok, in _process
 	else:
 		_send_client_to_server()
 
-#Register a client with the server
+#register a client with the server
 func _send_client_to_server():
 	yield(get_tree().create_timer(2.0), "timeout")
 	var buffer = PoolByteArray()
@@ -250,7 +274,7 @@ func _send_client_to_server():
 func _exit_tree():
 	server_udp.close()
 
-#a
+#initialize timer
 func _ready():
 	p_timer = Timer.new()
 	get_node("/root/").call_deferred("add_child", p_timer)
