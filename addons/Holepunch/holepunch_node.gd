@@ -41,6 +41,10 @@ export(int) var rendevouz_port = 4000
 export(int) var port_cascade_range = 10
 #The amount of messages of the same type you will send before cascading or giving up
 export(int) var response_window = 5
+#max session size
+export(int) var MAX_PLAYER_COUNT = 2
+#dev testing mode! this will override your peers ip with 'localhost' to test on your own machine.
+export(bool) var local_testing = false
 
 var found_server = false
 var recieved_peer_info = false
@@ -75,10 +79,6 @@ const SERVER_OK = "ok:"
 const SERVER_LOBBY = "lobby:" #lobby info, sends list of playernames
 const SERVER_INFO = "peers:"
 const SERVER_CLOSE = "close:" #message from server that you failed to connect, or got disconnected. like host closed lobby or lobby full
-
-const MAX_PLAYER_COUNT = 2
-
-const local_testing = false #dev testing mode! this will override your peers ip with 'localhost' to test on your own machine.
 
 #handle incoming messages
 func _process(delta):
@@ -182,6 +182,15 @@ func _cascade_peer(peer_address, peer_port):
 		ports_tried += 1
 
 #contact other peers, repeatedly called by p_timer, started in start_peer_contact
+
+#redo this to work with >2 players, keeping track of who has what, and doing what they need in a big for each peer loop
+#waiting for all to be ready in the end
+
+#future structure:
+#greet: telling peers what port you are listening on, if you are host (or that could be sent by server probably)
+#-confirm: telling peers you received their port and are listening (not really necesarry? just make sure everyone has a greet from everybody)
+#confirm: telling peers you've received all info from peers (waiting on other peers to receive the same)
+#go: tell peers we're initiating (if all peers are ready, this could probably just be sent by host just fine)
 func _ping_peer():	
 	#send greets
 	if not recieved_peer_confirm and greets_sent < response_window:
