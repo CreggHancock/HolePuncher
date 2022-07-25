@@ -94,6 +94,17 @@ class ServerProtocol(DatagramProtocol):
 			c_name = split[1]
 			self.client_checkout(c_name)
 
+		elif msg_type == "cs":
+			# close session
+			split = data_string.split(":")
+			session = split[1]
+			reason = split[2]
+			c_ip, c_port = address
+			try:
+				self.active_sessions[session].close(c_ip,reason)
+			except KeyError:
+				print("Host tried to close non-existing session")
+				
 
 
 class Session:
@@ -129,6 +140,14 @@ class Session:
 			self.server.client_checkout(client.name)
 		self.server.remove_session(self.id)
 
+	def close(self, host_ip, reason):
+		if self.registered_clients[0].ip != host_ip:
+			return #just a bit of security, non hosts can't close session
+		for client in self.registered_clients:
+			message = bytes("close:"+reason, "utf-8")
+			self.server.transport.write(message, (client.ip, client.port))
+		print("Closing session due to: "+reason)
+		self.server.remove_session(self.id)
 
 class Client:
 
