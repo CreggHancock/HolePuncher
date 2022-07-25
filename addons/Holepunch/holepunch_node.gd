@@ -43,7 +43,7 @@ export(int) var port_cascade_range = 10
 #The amount of messages of the same type you will send before cascading or giving up
 export(int) var response_window = 5
 
-var local_testing = true #dev testing mode! this will override your peers ip with 'localhost' to test on your own machine.
+var local_testing = false #dev testing mode! this will override your peers ip with 'localhost' to test on your own machine.
 
 var found_server = false
 var recieved_peer_info = false
