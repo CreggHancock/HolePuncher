@@ -75,7 +75,7 @@ Returns a message if connection failed in anyway, allowing the client to reset U
 
 -`void start_traversal(string key, bool is_player_host, string player_name, string nickname)` Call this method on the HolePunch node when you are ready to begin the HolePunch process. 
 
--`void finalize_peers(string key)` Call this method on the HolePunch node when you want to stop waiting for peers to begin the HolePunch process early before the server has reached the *max_player_count* value.
+-`void finalize_peers()` Call this method on the HolePunch node when you want to stop waiting for peers to begin the HolePunch process early before the server has reached the *max_player_count* value.
 
 -`void client_disconnect()` This method has a non-client disconnect from the current session.
 
