@@ -23,13 +23,12 @@ signal hole_punched(my_port, hosts_port, hosts_address)
 signal session_registered
 
 #Sends names of players as they join/leave
-signal update_lobby(nicknames)
+signal update_lobby(nicknames,max_players)
 
 #Relay that connection was unsuccessful.
-#If error is true, then the cause was an error
 #The reason for failure will be stored in message.
 #Setup your game to return to initial connection UI, and report fail reason for user feedback. 
-signal return_unsuccessful(error, message) 
+signal return_unsuccessful(message) 
 
 var server_udp = PacketPeerUDP.new()
 var peer_udp = PacketPeerUDP.new()
@@ -42,8 +41,6 @@ export(int) var rendevouz_port = 4000
 export(int) var port_cascade_range = 10
 #The amount of messages of the same type you will send before cascading or giving up
 export(int) var response_window = 5
-
-var local_testing = false #dev testing mode! this will override your peers ip with 'localhost' to test on your own machine.
 
 var found_server = false
 var recieved_peer_info = false
@@ -69,7 +66,7 @@ var gos_sent = 0
 const REGISTER_SESSION = "rs:"
 const REGISTER_CLIENT = "rc:"
 const CLOSE_SESSION = "cs:" #message from host client to preemptively end session
-const EXCHANGE_PEERS = "ep:"
+const EXCHANGE_PEERS = "ep:" #client message to exchange peer info early
 const CHECKOUT_CLIENT = "cc:"
 const PEER_GREET = "greet:"
 const PEER_CONFIRM = "confirm:"
@@ -80,6 +77,8 @@ const SERVER_INFO = "peers:"
 const SERVER_CLOSE = "close:" #message from server that you failed to connect, or got disconnected. like host closed lobby or lobby full
 
 const MAX_PLAYER_COUNT = 2
+
+const local_testing = false #dev testing mode! this will override your peers ip with 'localhost' to test on your own machine.
 
 #handle incoming messages
 func _process(delta):
@@ -98,7 +97,7 @@ func _process(delta):
 			if packet_string.begins_with(PEER_CONFIRM):
 				print("peer confirm!")
 				var m = packet_string.split(":")
-				_handle_confirm_message(m[2], m[1], m[4], m[3]) #weird that this is out of order?
+				_handle_confirm_message(m[2], m[1], m[4], m[3])
 
 		elif not recieved_peer_go:
 			if packet_string.begins_with(PEER_GO):
@@ -115,7 +114,7 @@ func _process(delta):
 			emit_signal('update_lobby',m[1].split(","),m[2])
 		if packet_string.begins_with(SERVER_CLOSE):
 			var m = packet_string.split(":")
-			handle_failure(false, "Disconnected: "+m[1])
+			handle_failure("Disconnected: "+m[1])
 			return
 		if packet_string.begins_with(SERVER_OK):
 			var m = packet_string.split(":")
@@ -142,7 +141,7 @@ func _process(delta):
 					start_peer_contact()
 				else:
 					#apparently no peers were sent, host probably began without others.
-					handle_failure(false,"No peers found.") #report to game to handle accordingly
+					handle_failure("No peers found.") #report to game to handle accordingly
 
 #handle peer greet; reconfigure ports
 func _handle_greet_message(peer_name, peer_port, my_port):
@@ -152,7 +151,7 @@ func _handle_greet_message(peer_name, peer_port, my_port):
 		peer_udp.listen(own_port, "*")
 	recieved_peer_greet = true #see messages at top
 
-#handle confirm; what is confirm?
+#handle confirm
 func _handle_confirm_message(peer_name, peer_port, my_port, peer_is_host):
 	if peer[peer_name].port != peer_port:
 		peer[peer_name].port = peer_port
@@ -174,9 +173,9 @@ func _handle_go_message(peer_name):
 	set_process(false) #stop _process
 
 #search for better ports, send greetings accordingly
-func _cascade_peer(add, peer_port): #why is peer address called add?
+func _cascade_peer(peer_address, peer_port):
 	for i in range(peer_port - port_cascade_range, peer_port + port_cascade_range):
-		peer_udp.set_dest_address(add, i)
+		peer_udp.set_dest_address(peer_address, i)
 		var buffer = PoolByteArray()
 		buffer.append_array((PEER_GREET+client_name+":"+str(own_port)+":"+str(i)).to_utf8()) #tell peers about new port
 		peer_udp.put_packet(buffer)
@@ -184,8 +183,6 @@ func _cascade_peer(add, peer_port): #why is peer address called add?
 
 #contact other peers, repeatedly called by p_timer, started in start_peer_contact
 func _ping_peer():	
-	#peer.keys() could be changed to peer, making peer[p] just p
-
 	#send greets
 	if not recieved_peer_confirm and greets_sent < response_window:
 		print("send greet!")
@@ -203,7 +200,7 @@ func _ping_peer():
 			_cascade_peer(peer[p].address, int(peer[p].port))
 		greets_sent += 1
 
-	#?send confirm to other peers
+	#send confirm to other peers
 	if recieved_peer_greet and not recieved_peer_go:
 		print("send confirm!")
 		for p in peer.keys():
@@ -236,7 +233,7 @@ func start_peer_contact():
 		peer_udp.close()
 	var err = peer_udp.listen(own_port, "*")
 	if err != OK:
-		handle_failure(true,"Error listening on port: " + str(own_port) +", " + str(err))
+		handle_failure("Error listening on port: " + str(own_port) +", " + str(err))
 		return
 	p_timer.start() #repeatedly calls _ping_peer
 
@@ -247,7 +244,7 @@ func finalize_peers():
 	server_udp.set_dest_address(rendevouz_address, rendevouz_port)
 	server_udp.put_packet(buffer)
 
-#remove a client from the server
+#removes a client from the server
 func checkout():
 	var buffer = PoolByteArray()
 	buffer.append_array((CHECKOUT_CLIENT+client_name).to_utf8())
@@ -261,7 +258,7 @@ func start_traversal(id, is_player_host, player_name, player_nickname):
 
 	var err = server_udp.listen(rendevouz_port, "*")
 	if err != OK:
-		handle_failure(true,"Error listening on port: " + str(rendevouz_port) + " to server: " + rendevouz_address)
+		handle_failure("Error listening on port: " + str(rendevouz_port) + " to server: " + rendevouz_address)
 		return
 
 	is_host = is_player_host
@@ -302,27 +299,26 @@ func _exit_tree():
 	server_udp.close()
 
 #reports connection failure, and stops all connections
-func handle_failure(is_error,message):
+func handle_failure(message):
 	print("Holepunch unsuccessful, stopping processes!")
 	if is_host and server_udp.is_listening() and found_server: #shutdown session if possible
 		var buffer = PoolByteArray()
-		var error_blurb = "Error, " if is_error else ""
-		buffer.append_array((CLOSE_SESSION+str(session_id)+":"+error_blurb+message).to_utf8())
+		buffer.append_array((CLOSE_SESSION+str(session_id)+":"+message).to_utf8())
 		server_udp.put_packet(buffer)
 	else:
 		checkout() #remove client from session if not
 	p_timer.stop()
 	server_udp.close()
 	peer_udp.close()
-	emit_signal("return_unsuccessful",is_error,message)
+	emit_signal("return_unsuccessful",message)
 
 #call this from non-host client to disconnect from a session
 func client_disconnect():
-	handle_failure(false, "Client disconnected.")
+	handle_failure("Client disconnected.")
 
 #call this from host client to forcefully close a session
 func close_session():
-	handle_failure(false, "Host preemptively closed session!")
+	handle_failure("Host preemptively closed session!")
 
 #initialize timer
 func _ready():
