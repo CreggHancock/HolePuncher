@@ -1,8 +1,8 @@
 extends Node
 #Todo:
-#-Server should send simple client info before holepunch has started, a sort of lobby visualisation and feedback so players can know if their friends are ready
-#--potentially server shouldn't auto start on full players, and leave that up to host?
 #-Peer contact should be improved, especially >2 players. Each stage should really be waiting on confirmation from everybody, or handling not.
+#--currently confirmations are only checked once, which probably means peers could get left behind if they didn't respond exactly the same.
+#-Have server time out sessions, maybe try pinging host every now and then and delete upon no response
 
 # General structure overview:
 
@@ -22,6 +22,9 @@ signal hole_punched(my_port, hosts_port, hosts_address)
 #address and port of the other client have arrived.
 signal session_registered
 
+#Sends names of players as they join/leave
+signal update_lobby(nicknames)
+
 #Relay that connection was unsuccessful.
 #If error is true, then the cause was an error
 #The reason for failure will be stored in message.
@@ -40,7 +43,7 @@ export(int) var port_cascade_range = 10
 #The amount of messages of the same type you will send before cascading or giving up
 export(int) var response_window = 5
 
-var local_testing = true #dev testing mode! this will override your peers ip with 127.0.0.0 to test on your own machine
+var local_testing = true #dev testing mode! this will override your peers ip with 'localhost' to test on your own machine.
 
 var found_server = false
 var recieved_peer_info = false
@@ -55,6 +58,7 @@ var peer = {}
 var host_address = ""
 var host_port = 0
 var client_name
+var nickname #appearance only
 var p_timer #ping timer, for communicating with peers
 var session_id
 
@@ -71,8 +75,9 @@ const PEER_GREET = "greet:"
 const PEER_CONFIRM = "confirm:"
 const PEER_GO = "go:"
 const SERVER_OK = "ok:"
+const SERVER_LOBBY = "lobby:" #lobby info, sends list of playernames
 const SERVER_INFO = "peers:"
-const SERVER_CLOSE = "close:" #message from server that host closed session
+const SERVER_CLOSE = "close:" #message from server that you failed to connect, or got disconnected. like host closed lobby or lobby full
 
 const MAX_PLAYER_COUNT = 2
 
@@ -105,8 +110,12 @@ func _process(delta):
 	if server_udp.get_available_packet_count() > 0:
 		var array_bytes = server_udp.get_packet()
 		var packet_string = array_bytes.get_string_from_ascii()
+		if packet_string.begins_with(SERVER_LOBBY):
+			var m = packet_string.split(":")
+			emit_signal('update_lobby',m[1].split(","),m[2])
 		if packet_string.begins_with(SERVER_CLOSE):
-			close_session("Host preemptively closed session!")
+			var m = packet_string.split(":")
+			handle_failure(false, "Disconnected: "+m[1])
 			return
 		if packet_string.begins_with(SERVER_OK):
 			var m = packet_string.split(":")
@@ -232,9 +241,9 @@ func start_peer_contact():
 	p_timer.start() #repeatedly calls _ping_peer
 
 #this function can be called to the server if you want to end the holepunch before the server closes the session
-func finalize_peers(id):
+func finalize_peers():
 	var buffer = PoolByteArray()
-	buffer.append_array((EXCHANGE_PEERS+str(id)).to_utf8())
+	buffer.append_array((EXCHANGE_PEERS+str(session_id)).to_utf8())
 	server_udp.set_dest_address(rendevouz_address, rendevouz_port)
 	server_udp.put_packet(buffer)
 
@@ -246,7 +255,7 @@ func checkout():
 	server_udp.put_packet(buffer)
 
 #call this function when you want to start the holepunch process
-func start_traversal(id, is_player_host, player_name):
+func start_traversal(id, is_player_host, player_name, player_nickname):
 	if server_udp.is_listening():
 		server_udp.close()
 
@@ -257,6 +266,7 @@ func start_traversal(id, is_player_host, player_name):
 
 	is_host = is_player_host
 	client_name = player_name
+	nickname = player_nickname
 	found_server = false
 	recieved_peer_info = false
 	recieved_peer_greet = false
@@ -282,7 +292,7 @@ func start_traversal(id, is_player_host, player_name):
 func _send_client_to_server():
 	yield(get_tree().create_timer(2.0), "timeout") #resume upon timeout of 2 second timer; aka wait 2s
 	var buffer = PoolByteArray()
-	buffer.append_array((REGISTER_CLIENT+client_name+":"+session_id).to_utf8())
+	buffer.append_array((REGISTER_CLIENT+client_name+":"+session_id+":"+nickname).to_utf8())
 	server_udp.close()
 	server_udp.set_dest_address(rendevouz_address, rendevouz_port)
 	server_udp.put_packet(buffer)
@@ -294,9 +304,10 @@ func _exit_tree():
 #reports connection failure, and stops all connections
 func handle_failure(is_error,message):
 	print("Holepunch unsuccessful, stopping processes!")
-	if is_host and server_udp.is_connected_to_host() and found_server: #shutdown session if possible
+	if is_host and server_udp.is_listening() and found_server: #shutdown session if possible
 		var buffer = PoolByteArray()
-		buffer.append_array((CLOSE_SESSION+session_id+":"+message).to_utf8())
+		var error_blurb = "Error, " if is_error else ""
+		buffer.append_array((CLOSE_SESSION+str(session_id)+":"+error_blurb+message).to_utf8())
 		server_udp.put_packet(buffer)
 	else:
 		checkout() #remove client from session if not
@@ -310,7 +321,7 @@ func client_disconnect():
 	handle_failure(false, "Client disconnected.")
 
 #call this from host client to forcefully close a session
-func close_session(reason):
+func close_session():
 	handle_failure(false, "Host preemptively closed session!")
 
 #initialize timer
