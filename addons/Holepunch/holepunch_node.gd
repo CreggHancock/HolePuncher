@@ -136,7 +136,7 @@ func _process(delta):
 					var clientdata = packet_string.split(",") #this is formatted client:ip:port,client2:ip:port
 					for c in clientdata:
 						var m = c.split(":")
-						peers[m[1]] = {"port":m[2], "address":("localhost" if local_testing else m[1]),"hosting":m[3],"name":m[4]}
+						peers[m[0]] = {"port":m[2], "address":("localhost" if local_testing else m[1]),"hosting":m[3],"name":m[0]}
 					recieved_peer_info = true
 					start_peer_contact()
 				else:
@@ -145,17 +145,24 @@ func _process(delta):
 
 #handle peer greet; reconfigure ports
 func _handle_greet_message(peer_name, peer_port):
-	if peer_stages[peer_name] == 0: peer_stages[peer_ip] = 1
+	if not peer_name in peer_stages:
+		peer_stages[peer_name] = 0
+	if peer_stages[peer_name] == 0: peer_stages[peer_name] = 1
 	peers[peer_name].port = peer_port
+	if peers[peer_name].hosting:
+		host_port=peer_port
+		host_address=peers[peer_name].address
 
 func _handle_confirm_message(peer_name,peer_port):
+	if not peer_name in peer_stages:
+		peer_stages[peer_name] = 0
 	peer_stages[peer_name] = 2
-	peers[peer_name].port = peer_port #why not
 
 func _handle_go_message(peer_name,peer_port):
 	peer_stages[peer_name] = 2
 	if peers[peer_name].hosting:
-		emit_signal("hole_punched", int(own_port), int(host_port), host_address)
+		emit_signal("hole_punched", int(own_port), int(host_port), host_address, MAX_PLAYER_COUNT)
+		peer_udp.close()
 		p_timer.stop()
 		set_process(false)
 
@@ -174,9 +181,9 @@ func _ping_peer():
 	var all_confirm = true
 	for p in peers.keys():
 		var peer = peers[p]
-		if not peer.address in peer_stages:
+		if not peer.name in peer_stages:
 			peer_stages[peer.name] = 0
-		var stage = peer_stages[peer.address]
+		var stage = peer_stages[peer.name]
 		if stage < 1: all_info = false
 		if stage < 2: all_confirm = false
 		if stage == 0: #received no contact, send greet
@@ -203,7 +210,8 @@ func _ping_peer():
 				var buffer = PoolByteArray()
 				buffer.append_array((HOST_GO+client_name+":"+str(own_port)).to_utf8())
 				peer_udp.put_packet(buffer)
-			emit_signal("hole_punched", int(own_port), int(host_port), host_address)
+			emit_signal("hole_punched", int(own_port), int(host_port), host_address, MAX_PLAYER_COUNT)
+			peer_udp.close()
 			p_timer.stop()
 			set_process(false)
 	#are some peers not responding? handle this
