@@ -136,7 +136,7 @@ func _process(delta):
 					for c in clientdata:
 						var m = c.split(":")
 						if local_testing:
-							m[1] = "127.0.0.0"
+							m[1] = "localhost"
 						peer[m[0]] = {"port":m[2], "address":m[1]}
 					recieved_peer_info = true
 					start_peer_contact()
