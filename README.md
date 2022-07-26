@@ -31,7 +31,7 @@ The HolePunch plugin can be used in combination with the Server to manage port-f
 
 #### Signals
 
--`hole_punched(int my_port, int hosts_port, string hosts_address)`
+-`hole_punched(int my_port, int hosts_port, string hosts_address, int num_players_joining)`
 
 Emitted when all peers have completed their holepunch and are ready to connect to your game server
 
