@@ -260,6 +260,8 @@ func start_traversal(id, is_player_host, player_name, player_nickname):
 		handle_failure("Error listening on port: " + str(rendevouz_port) + " to server: " + rendevouz_address)
 		return
 
+	set_process(true)
+	
 	is_host = is_player_host
 	client_name = player_name
 	nickname = player_nickname
