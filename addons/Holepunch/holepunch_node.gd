@@ -157,7 +157,7 @@ func _handle_confirm_message(peer_name,peer_port):
 func _handle_go_message(peer_name,peer_port):
 	peer_stages[peer_name] = 2
 	if peers[peer_name].hosting:
-		emit_signal("hole_punched", int(own_port), int(host_port), host_address, MAX_PLAYER_COUNT)
+		emit_signal("hole_punched", int(own_port), int(host_port), host_address, peers.length())
 		peer_udp.close()
 		p_timer.stop()
 		set_process(false)
@@ -217,7 +217,7 @@ func _ping_peer():
 				var buffer = PoolByteArray()
 				buffer.append_array((HOST_GO+client_name+":"+str(own_port)).to_utf8())
 				peer_udp.put_packet(buffer)
-			emit_signal("hole_punched", int(own_port), int(host_port), host_address, MAX_PLAYER_COUNT)
+			emit_signal("hole_punched", int(own_port), int(host_port), host_address, peers.length())
 			peer_udp.close()
 			p_timer.stop()
 			set_process(false)
@@ -261,7 +261,7 @@ func start_traversal(id, is_player_host, player_name, player_nickname):
 		return
 
 	set_process(true)
-	
+
 	is_host = is_player_host
 	client_name = player_name
 	nickname = player_nickname
