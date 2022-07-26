@@ -102,6 +102,8 @@ class ServerProtocol(DatagramProtocol):
 				self.register_client(c_name, c_session, c_ip, c_port, c_nickname)
 			except ServerFail as e:
 				self.transport.write(bytes('close:'+str(e),"utf-8"), address)
+			else:
+				self.active_sessions[c_session].update_lobby()
 
 		elif msg_type == "ep":
 			# exchange peers

@@ -1,8 +1,6 @@
 extends Node
 #Todo:
-#-Peer contact should be improved, especially >2 players. Each stage should really be waiting on confirmation from everybody, or handling not.
-#--currently confirmations are only checked once, which probably means peers could get left behind if they didn't respond exactly the same.
-#-Have server time out sessions, maybe try pinging host every now and then and delete upon no response
+# Have server time out sessions, maybe try pinging host every now and then and delete upon no response
 
 # General structure overview:
 
@@ -40,7 +38,7 @@ export(int) var rendevouz_port = 4000
 #This is the range of ports you will search if you hear no response from the first port tried
 export(int) var port_cascade_range = 10
 #The amount of messages of the same type you will send before cascading or giving up
-export(int) var response_window = 5
+export(int) var response_window = 20
 #max session size
 export(int) var MAX_PLAYER_COUNT = 2
 #dev testing mode! this will override your peers ip with 'localhost' to test on your own machine.
@@ -54,7 +52,6 @@ var recieved_peer_confirms = false
 var is_host = false
 
 var own_port
-var own_address
 var peers = {}
 var peer_stages = {}
 # [peer.address] = 0,1,2
@@ -68,9 +65,7 @@ var nickname #appearance only
 var p_timer #ping timer, for communicating with peers
 var session_id
 
-var ports_tried = 0
-var greets_sent = 0
-var gos_sent = 0
+var ping_cycles = 0 #how many times peers have pinged eachother
 
 const REGISTER_SESSION = "rs:"
 const REGISTER_CLIENT = "rc:"
@@ -89,23 +84,22 @@ const SERVER_CLOSE = "close:" #message from server that you failed to connect, o
 func _process(delta):
 	#handle peer messages
 	if peer_udp.get_available_packet_count() > 0:
-		print("peer message!")
 		var array_bytes = peer_udp.get_packet()
 		var packet_string = array_bytes.get_string_from_ascii()
 		if packet_string.begins_with(PEER_GREET):
-			print("peer greet!")
+			print("< peer greet!")
 			var m = packet_string.split(":")
 			_handle_greet_message(m[1], int(m[2]))
-
-		if packet_string.begins_with(PEER_CONFIRM):
-			print("peer confirm!")
+		elif packet_string.begins_with(PEER_CONFIRM):
+			print("< peer confirm!")
 			var m = packet_string.split(":")
 			_handle_confirm_message(m[1], int(m[2]))
-
-		if packet_string.begins_with(HOST_GO):
-			print("host go!")
+		elif packet_string.begins_with(HOST_GO):
+			print("< host go!")
 			var m = packet_string.split(":")
 			_handle_go_message(m[1], int(m[2]))
+		else:
+			print("< unrecognized peer message!")
 
 	#handle server messages
 	if server_udp.get_available_packet_count() > 0:
@@ -121,7 +115,7 @@ func _process(delta):
 		if packet_string.begins_with(SERVER_OK):
 			var m = packet_string.split(":")
 			own_port = int( m[1] )
-			print(own_port)
+			print("Listening on port: ",own_port)
 			emit_signal('session_registered')
 			if is_host:
 				if !found_server:
@@ -143,7 +137,7 @@ func _process(delta):
 					#apparently no peers were sent, host probably began without others.
 					handle_failure("No peers found.") #report to game to handle accordingly
 
-#handle peer greet; reconfigure ports
+#receive peer info, reset their port if you had it wrong
 func _handle_greet_message(peer_name, peer_port):
 	if not peer_name in peer_stages:
 		peer_stages[peer_name] = 0
@@ -153,11 +147,13 @@ func _handle_greet_message(peer_name, peer_port):
 		host_port=peer_port
 		host_address=peers[peer_name].address
 
+#message that a peer has received all other peer's info
 func _handle_confirm_message(peer_name,peer_port):
 	if not peer_name in peer_stages:
 		peer_stages[peer_name] = 0
 	peer_stages[peer_name] = 2
 
+#message from host to start connection
 func _handle_go_message(peer_name,peer_port):
 	peer_stages[peer_name] = 2
 	if peers[peer_name].hosting:
@@ -166,16 +162,20 @@ func _handle_go_message(peer_name,peer_port):
 		p_timer.stop()
 		set_process(false)
 
+#search for working ports, send greetings accordingly
+func _cascade_peer(peer_address, peer_port):
+	for i in range(peer_port - port_cascade_range, peer_port + port_cascade_range):
+		peer_udp.set_dest_address(peer_address, i)
+		var buffer = PoolByteArray()
+		buffer.append_array((PEER_GREET+client_name+":"+str(own_port)).to_utf8()) #tell peer about your new port
+		peer_udp.put_packet(buffer)
+
 #contact other peers, repeatedly called by p_timer, started in start_peer_contact
 
-#redo this to work with >2 players, keeping track of who has what, and doing what they need in a big for each peer loop
-#waiting for all to be ready in the end
-
-#future structure:
-#greet: telling peers what port you are listening on, if you are host (or that could be sent by server probably)
-#-confirm: telling peers you received their port and are listening (not really necesarry? just make sure everyone has a greet from everybody)
-#confirm: telling peers you've received all info from peers (waiting on other peers to receive the same)
-#go: tell peers we're initiating (if all peers are ready, this could probably just be sent by host just fine)
+#structure:
+#greet: telling peers what port you are listening on, making them reconfigure if they had it wrong
+#confirm: telling peers that you've received *all other peer's* info, and are waiting for other peers to do the same
+#go: initiated by host when all peers have confirmed, tells peers to start peer to peer connection
 func _ping_peer():
 	var all_info = true
 	var all_confirm = true
@@ -187,17 +187,24 @@ func _ping_peer():
 		if stage < 1: all_info = false
 		if stage < 2: all_confirm = false
 		if stage == 0: #received no contact, send greet
-			print("send greet!")
-			peer_udp.set_dest_address(peer.address, int(peer.port))
-			var buffer = PoolByteArray()
-			buffer.append_array((PEER_GREET+client_name+":"+str(own_port)).to_utf8())
-			peer_udp.put_packet(buffer)
+			if ping_cycles >= response_window:
+				_cascade_peer(peer.address,peer.port)
+			else:
+				print("> send greet!")
+				peer_udp.set_dest_address(peer.address, int(peer.port))
+				var buffer = PoolByteArray()
+				buffer.append_array((PEER_GREET+client_name+":"+str(own_port)).to_utf8())
+				peer_udp.put_packet(buffer)
 		if stage == 1 and recieved_peer_greets:
-			print("send confirm!")
+			print("> send confirm!")
 			peer_udp.set_dest_address(peer.address, int(peer.port))
 			var buffer = PoolByteArray()
 			buffer.append_array((PEER_CONFIRM+client_name+":"+str(own_port)).to_utf8())
 			peer_udp.put_packet(buffer)
+		#initiate fail if peer can't connect to you (stage 0), or hasn't connected to all other peers (stage 1)
+		#in this case, all peers should have atleast one unsuccessful connection, and we will throw an error to the game
+		if stage < 2 and ping_cycles >= (response_window*1.5):
+			handle_failure("Not all peers were able to connect through peer-to-peer! If this continues, consider port-forwarding as a fallback option.")
 	if all_info:
 		recieved_peer_greets = true
 	if all_confirm:
@@ -205,7 +212,7 @@ func _ping_peer():
 		if is_host:
 			for p in peers.keys():
 				var peer = peers[p]
-				print("send go!")
+				print("> send go!")
 				peer_udp.set_dest_address(peer.address, int(peer.port))
 				var buffer = PoolByteArray()
 				buffer.append_array((HOST_GO+client_name+":"+str(own_port)).to_utf8())
@@ -214,11 +221,11 @@ func _ping_peer():
 			peer_udp.close()
 			p_timer.stop()
 			set_process(false)
-	#are some peers not responding? handle this
+	ping_cycles+=1
 
 #initiate _ping_peer loop, disconnect from server
 func start_peer_contact():	
-	print(peers)
+	print("starting peer contact")
 	server_udp.put_packet("goodbye".to_utf8()) #this might not always get called because the server_udp is already closed before this. seems to be true from testing.
 	server_udp.close()
 	if peer_udp.is_listening():
@@ -263,9 +270,7 @@ func start_traversal(id, is_player_host, player_name, player_nickname):
 	peers = {}
 	peer_stages = {}
 
-	ports_tried = 0
-	greets_sent = 0
-	gos_sent = 0
+	ping_cycles = 0
 	session_id = id
 	
 	if (is_host):
@@ -314,16 +319,6 @@ func close_session():
 
 #initialize timer
 func _ready():
-	#replace with a better way to get public ip if you know one
-	if OS.has_feature("windows"):
-	    if OS.has_enviroment("COMPUTERNAME"):
-	        own_address =  IP.resolve_hostname(str(OS.get_environment("COMPUTERNAME")),1)
-	elif OS.has_feature("x11"):
-	    if OS.has_enviroment("HOSTNAME"):
-	        own_address =  IP.resolve_hostname(str(OS.get_environment("HOSTNAME")),1)
-	elif OS.has_feature("OSX"):
-	    if OS.has_enviroment("HOSTNAME"):
-	        own_address =  IP.resolve_hostname(str(OS.get_environment("HOSTNAME")),1)
 	p_timer = Timer.new()
 	get_node("/root/").call_deferred("add_child", p_timer)
 	p_timer.connect("timeout", self, "_ping_peer")
