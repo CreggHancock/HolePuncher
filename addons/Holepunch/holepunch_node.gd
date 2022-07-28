@@ -1,6 +1,4 @@
 extends Node
-#Todo:
-# Have server time out sessions, maybe try pinging host every now and then and delete upon no response
 
 # General structure overview:
 

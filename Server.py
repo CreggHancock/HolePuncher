@@ -25,12 +25,12 @@ class ServerProtocol(DatagramProtocol):
 	def name_is_registered(self, name):
 		return name in self.registered_clients
 
-	def create_session(self, s_id, client_list):
+	def create_session(self, s_id, client_list,host_ip):
 		if s_id in self.active_sessions:
 			print("Tried to create existing session")
 			raise(ServerFail("Tried to create existing session"))
 
-		self.active_sessions[s_id] = Session(s_id, client_list, self)
+		self.active_sessions[s_id] = Session(s_id, client_list, self, host_ip)
 
 	def remove_session(self, s_id):
 		try:
@@ -45,9 +45,11 @@ class ServerProtocol(DatagramProtocol):
 
 	def register_client(self, c_name, c_session, c_ip, c_port, c_nickname):
 		if self.name_is_registered(c_name):
-			print("Client %s is already registered." % [c_name])
-			raise(ServerFail("Client already registered"))
-			#this case should probably disconnect the old one
+			if self.registered_clients[c_name].ip == c_ip: #disconnect old client if they have the same ip
+				self.client_checkout(c_name)
+			else:
+				print("Client %s is already registered." % [c_name])
+				raise(ServerFail("Client already registered"))
 		if not c_session in self.active_sessions:
 			print("Client registered for non-existing session")
 			raise(ServerFail("Client registered for non-existing session"))
@@ -90,7 +92,7 @@ class ServerProtocol(DatagramProtocol):
 			session = split[1]
 			max_clients = split[2]
 			try:
-				self.create_session(session, max_clients)
+				self.create_session(session, max_clients,c_ip)
 			except ServerFail as e:
 				self.transport.write(bytes('close:'+str(e),"utf-8"), address)
 
@@ -101,9 +103,9 @@ class ServerProtocol(DatagramProtocol):
 			c_session = split[2]
 			c_nickname = split[3]
 			c_ip, c_port = address
-			self.transport.write(bytes('ok:'+str(c_port),"utf-8"), address)
 			try:
 				self.register_client(c_name, c_session, c_ip, c_port, c_nickname)
+				self.transport.write(bytes('ok:'+str(c_port),"utf-8"), address)
 			except ServerFail as e:
 				self.transport.write(bytes('close:'+str(e),"utf-8"), address)
 			else:
@@ -133,17 +135,18 @@ class ServerProtocol(DatagramProtocol):
 			except KeyError:
 				print("Host tried to close non-existing session")
 			else:
-				if len(s.registered_clients) == 0 or s.registered_clients[0].ip != c_ip:
+				if len(s.registered_clients) == 0 or s.host_ip != c_ip:
 					return #just a teensy bit of security, non hosts can't close session
 				s.close(c_reason)
 				
 
 
 class Session:
-	def __init__(self, session_id, max_clients, server):
+	def __init__(self, session_id, max_clients, server, host_ip):
 		self.id = session_id
 		self.client_max = max_clients
 		self.server = server
+		self.host_ip = host_ip
 		self.registered_clients = []
 		reactor.callLater(600, server.remove_session,session_id) #timeout session after 10 minutes, just in case
 
@@ -170,7 +173,7 @@ class Session:
 			address_list = []
 			for client in self.registered_clients:
 				if not client.name == addressed_client.name:
-					address_list.append(client.name + ":" + address_to_string((client.ip, client.port))+":"+str(self.registered_clients[0].name==client.name))
+					address_list.append(client.name + ":" + address_to_string((client.ip, client.port))+":"+str(self.host_ip==client.ip))
 			address_string = ",".join(address_list)
 			message = bytes( "peers:" + address_string, "utf-8")
 			self.server.transport.write(message, (addressed_client.ip, addressed_client.port))
