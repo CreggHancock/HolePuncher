@@ -38,7 +38,7 @@ export(int) var rendevouz_port = 4000
 #This is the range of ports you will search if you hear no response from the first port tried
 export(int) var port_cascade_range = 10
 #The amount of messages of the same type you will send before cascading or giving up
-export(int) var response_window = 20
+export(int) var response_window = 150
 #max session size
 export(int) var MAX_PLAYER_COUNT = 2
 #dev testing mode! this will override your peers ip with 'localhost' to test on your own machine.
@@ -164,7 +164,7 @@ func _handle_go_message(peer_name,peer_port):
 
 #search for working ports, send greetings accordingly
 func _cascade_peer(peer_address, peer_port):
-	for i in range(peer_port - port_cascade_range, peer_port + port_cascade_range):
+	for i in range(int(peer_port) - port_cascade_range, int(peer_port) + port_cascade_range):
 		peer_udp.set_dest_address(peer_address, i)
 		var buffer = PoolByteArray()
 		buffer.append_array((PEER_GREET+client_name+":"+str(own_port)).to_utf8()) #tell peer about your new port
@@ -203,7 +203,7 @@ func _ping_peer():
 			peer_udp.put_packet(buffer)
 		#initiate fail if peer can't connect to you (stage 0), or hasn't connected to all other peers (stage 1)
 		#in this case, all peers should have atleast one unsuccessful connection, and we will throw an error to the game
-		if stage < 2 and ping_cycles >= (response_window*1.5):
+		if stage < 2 and ping_cycles >= (response_window*2):
 			handle_failure("Not all peers were able to connect through peer-to-peer! If this continues, consider port-forwarding as a fallback option.")
 	if all_info:
 		recieved_peer_greets = true

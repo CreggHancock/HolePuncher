@@ -18,7 +18,6 @@ class ServerFail(Exception): #used to catch errors and invalid registering, and 
         return(repr(self.value))
 
 class ServerProtocol(DatagramProtocol):
-
 	def __init__(self):
 		self.active_sessions = {}
 		self.registered_clients = {}
@@ -35,6 +34,10 @@ class ServerProtocol(DatagramProtocol):
 
 	def remove_session(self, s_id):
 		try:
+			for client in self.active_sessions[s_id].registered_clients: #incase players are still in lobby
+				message = bytes("close:Session closed.", "utf-8")
+				self.transport.write(message, (client.ip, client.port))
+				del self.registered_clients[client.name]
 			del self.active_sessions[s_id]
 		except KeyError:
 			print("Tried to terminate non-existing session")
@@ -73,7 +76,8 @@ class ServerProtocol(DatagramProtocol):
 			print("Error unregistering client", e)
 
 	def datagramReceived(self, datagram, address):
-		"""Handle incoming datagram messages."""
+		#Handle incoming datagram messages.
+
 		print(datagram)
 		data_string = datagram.decode("utf-8")
 		msg_type = data_string[:2]
@@ -123,20 +127,25 @@ class ServerProtocol(DatagramProtocol):
 			c_session = split[1]
 			c_reason = split[2]
 			c_ip, c_port = address
+			s = None
 			try:
-				self.active_sessions[c_session].close(c_ip,c_reason)
+				s = self.active_sessions[c_session]
 			except KeyError:
 				print("Host tried to close non-existing session")
+			else:
+				if len(s.registered_clients) == 0 or s.registered_clients[0].ip != c_ip:
+					return #just a teensy bit of security, non hosts can't close session
+				s.close(c_reason)
 				
 
 
 class Session:
-
 	def __init__(self, session_id, max_clients, server):
 		self.id = session_id
 		self.client_max = max_clients
 		self.server = server
 		self.registered_clients = []
+		reactor.callLater(600, server.remove_session,session_id) #timeout session after 10 minutes, just in case
 
 	def update_lobby(self):
 		nicknames = []
@@ -171,9 +180,7 @@ class Session:
 			self.server.client_checkout(client.name)
 		self.server.remove_session(self.id)
 
-	def close(self, host_ip, reason):
-		if len(self.registered_clients) == 0 or self.registered_clients[0].ip != host_ip:
-			return #just a bit of security, non hosts can't close session
+	def close(self, reason):
 		for client in self.registered_clients:
 			message = bytes("close:"+reason, "utf-8")
 			self.server.transport.write(message, (client.ip, client.port))
