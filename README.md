@@ -2,6 +2,8 @@
 
 The HolePunch plugin can be used in combination with the Server to manage port-forwarding in your game through a method known as hole punching. To get started with the plugin start by importing the addons folder into your Godot game folder and enabling the plugin. Afterwards you can add the HolePunch node to the scene where you utilize matchmaking to begin setting up hole punching for your game.
 
+You can find a simple example project at: https://github.com/lukester535/godot-holepuncher-example-project
+
 ### Documentation
 
 
@@ -18,20 +20,34 @@ The HolePunch plugin can be used in combination with the Server to manage port-f
 | int         |rendevouz_port   |
 | int         |max_player_count |
 | bool        |is_host          |
-| bool        |starting_game    |
+| bool        |local_testing    |
 
 #### Methods
 
-| Return type | Name                                                                  |
-| ----------- | ----------------------------------------------------------------------|
-| void        | start_traversal( string key, bool is_player_host, string player_name) |
-| void        | finalize_peers( string key)                                           |
+| Return type | Name                                                                                   |
+| ----------- | ---------------------------------------------------------------------------------------|
+| void        | start_traversal( string key, bool is_player_host, string player_name, string nickname) |
+| void        | finalize_peers()                                                                       |
+| void        | client_disconnect()                                                                    |
+| void        | close_session()                                                                        |
 
 #### Signals
 
--`hole_punched(int my_port, int hosts_port, string hosts_address)`
+-`hole_punched(int my_port, int hosts_port, string hosts_address, int num_players_joining)`
 
 Emitted when all peers have completed their holepunch and are ready to connect to your game server
+
+-`session_registered()`
+
+Sends a message to the host once the server has acknowledged the lobby. Used to inform UI, status, or to stop connection timeout timers.
+
+-`update_lobby(nicknames,max_players)`
+
+Sends an array of player nicknames and max players to all clients, so you can construct something like "Lobby 2/5, Players: Bob, Jazmine"
+
+-`return_unsuccessful(message) `
+
+Returns a message if connection failed in anyway, allowing the client to reset UI.
 
 #### Property Descriptions
 
@@ -54,14 +70,18 @@ Emitted when all peers have completed their holepunch and are ready to connect t
 
 -`bool is_host` If the client running this game is the client hosting the game server or not.
 
+-`bool local_testing` If set to true, it will allow you to connect to your own computer, for testing the server and game functionality.
+
 
 #### Method Descriptions
 
--`void start_traversal(string key, bool is_player_host, string player_name)` Call this method on the HolePunch node when you are ready to begin the HolePunch process. 
+-`void start_traversal(string key, bool is_player_host, string player_name, string nickname)` Call this method on the HolePunch node when you are ready to begin the HolePunch process. 
 
--`void finalize_peers(string key)` Call this method on the HolePunch node when you want to stop waiting for peers to begin the HolePunch process early before the server has reached the *max_player_count* value.
+-`void finalize_peers()` Call this method on the HolePunch node when you want to stop waiting for peers to begin the HolePunch process early before the server has reached the *max_player_count* value.
 
--`void checkout()` Call this method on the HolePunch node when you want to cancel the HolePunch process after you've already started it.
+-`void client_disconnect()` This method has a non-client disconnect from the current session.
+
+-`void close_session()` Called as host, this attempts to close your current session (if any) kicking all players including you.
 
 
 # Server
@@ -71,7 +91,9 @@ The python server is based on https://github.com/stylesuxx/udp-hole-punching/
 
 Server requires Python 3 and Twisted: https://twistedmatrix.com/trac/
 
-`Usage: ./server.py PORT`
+`Usage: ./server.py PORT AUTOSTART(y/n)`
+
+Autostart determines whether the game starts automatically upon reaching player max. Otherwise it has to be started by clients.
 
 
 
