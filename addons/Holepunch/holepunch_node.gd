@@ -87,7 +87,7 @@ func _process(delta):
 		if not recieved_peer_info:
 			if packet_string.begins_with(SERVER_INFO):
 				server_udp.close()
-				packet_string = packet_string.right(6)
+				packet_string = packet_string.replace('peers:', "")
 				if packet_string.length() > 2:
 					var m = packet_string.split(":")
 					peer[m[0]] = {"port":m[2], "address":m[1]}
